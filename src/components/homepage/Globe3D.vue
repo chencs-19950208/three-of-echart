@@ -10,18 +10,21 @@
 
 <script>
 import * as THREE from 'three'
+import * as topojson from 'topojson-client'
 
 const MARKERS = [
-  { lat: 39.9, lng: 116.4, title: '北京站组', sub: 'C1', value: '600万' },
-  { lat: 35.6, lng: 139.7, title: '东京站组', sub: 'C2', value: '320万' },
-  { lat: 37.5, lng: 127.0, title: '首尔站组', sub: 'C3', value: '210万' },
-  { lat: 48.8, lng: 2.3, title: '巴黎站组', sub: 'C4', value: '180万' },
-  { lat: 51.5, lng: -0.1, title: '伦敦站组', sub: 'C5', value: '150万' },
-  { lat: 40.7, lng: -74.0, title: '纽约站组', sub: 'C6', value: '420万' },
-  { lat: 38.9, lng: -77.0, title: '华盛顿站组', sub: 'C7', value: '280万' },
-  { lat: 34.0, lng: -118.2, title: '洛杉矶站组', sub: 'C8', value: '190万' },
-  { lat: 55.7, lng: 37.6, title: '莫斯科站组', sub: 'C9', value: '260万' }
+  { lat: 39.9, lng: 116.4, title: '北京站组', sub: 'C1', value: '600万', countryId: '156' },
+  { lat: 35.6, lng: 139.7, title: '东京站组', sub: 'C2', value: '320万', countryId: '392' },
+  { lat: 37.5, lng: 127.0, title: '首尔站组', sub: 'C3', value: '210万', countryId: '410' },
+  { lat: 48.8, lng: 2.3, title: '巴黎站组', sub: 'C4', value: '180万', countryId: '250' },
+  { lat: 51.5, lng: -0.1, title: '伦敦站组', sub: 'C5', value: '150万', countryId: '826' },
+  { lat: 40.7, lng: -74.0, title: '纽约站组', sub: 'C6', value: '420万', countryId: '840' },
+  { lat: 38.9, lng: -77.0, title: '华盛顿站组', sub: 'C7', value: '280万', countryId: '840' },
+  { lat: 34.0, lng: -118.2, title: '洛杉矶站组', sub: 'C8', value: '190万', countryId: '840' },
+  { lat: 55.7, lng: 37.6, title: '莫斯科站组', sub: 'C9', value: '260万', countryId: '643' }
 ]
+
+const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 
 export default {
   name: 'Globe3D',
@@ -31,8 +34,10 @@ export default {
     }
   },
   mounted() {
+    this.countriesGeoJSON = null
     this.initScene()
     this.animate()
+    this.loadCountryData()
     window.addEventListener('resize', this.onResize)
     this.$refs.container.addEventListener('mousemove', this.onMouseMove)
     this.$refs.container.addEventListener('click', this.onClick)
@@ -51,6 +56,15 @@ export default {
         r * Math.cos(phi),
         r * Math.sin(phi) * Math.sin(theta)
       )
+    },
+    async loadCountryData() {
+      try {
+        const resp = await fetch(WORLD_ATLAS_URL)
+        const worldData = await resp.json()
+        this.countriesGeoJSON = topojson.feature(worldData, worldData.objects.countries)
+      } catch (e) {
+        console.warn('Failed to load country data:', e)
+      }
     },
     initScene() {
       const el = this.$refs.container
@@ -130,7 +144,6 @@ export default {
       this.mouse = new THREE.Vector2()
       this.isDragging = false
       this.prevMouse = { x: 0, y: 0 }
-      this.rotSpeed = { x: 0, y: 0.002 }
 
       el.addEventListener('mousedown', e => {
         this.isDragging = true
@@ -156,7 +169,12 @@ export default {
       const hits = this.raycaster.intersectObjects(this.markerMeshes)
       if (hits.length > 0) {
         const d = hits[0].object.userData
-        this.tooltip = { show: true, x: e.clientX - this.$refs.container.getBoundingClientRect().left + 15, y: e.clientY - this.$refs.container.getBoundingClientRect().top - 10, title: d.title, sub: d.sub, value: d.value }
+        this.tooltip = {
+          show: true,
+          x: e.clientX - rect.left + 15,
+          y: e.clientY - rect.top - 10,
+          title: d.title, sub: d.sub, value: d.value
+        }
       } else {
         this.tooltip.show = false
       }
@@ -171,25 +189,108 @@ export default {
         this.highlightCountry(hits[0].object.userData)
       }
     },
+    drawCountryBorder(coordinates, isMulti) {
+      const rings = isMulti ? coordinates.flat() : coordinates
+      const R = 1.005
+
+      rings.forEach(ring => {
+        const points = []
+        for (let i = 0; i < ring.length; i++) {
+          const [lng, lat] = ring[i]
+          points.push(this.latLngToVec3(lat, lng, R))
+        }
+        if (points.length < 2) return
+
+        // Main border line
+        const geo = new THREE.BufferGeometry().setFromPoints(points)
+        const borderLine = new THREE.Line(
+          geo,
+          new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 2, transparent: true, opacity: 0.9 })
+        )
+        this.highlightGroup.add(borderLine)
+
+        // Glow line (slightly larger radius)
+        const glowPoints = []
+        for (let i = 0; i < ring.length; i++) {
+          const [lng, lat] = ring[i]
+          glowPoints.push(this.latLngToVec3(lat, lng, R + 0.003))
+        }
+        const glowGeo = new THREE.BufferGeometry().setFromPoints(glowPoints)
+        const glowLine = new THREE.Line(
+          glowGeo,
+          new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 1, transparent: true, opacity: 0.3 })
+        )
+        this.highlightGroup.add(glowLine)
+      })
+    },
     highlightCountry(marker) {
       // Clear previous highlights
       while (this.highlightGroup.children.length) {
-        this.highlightGroup.remove(this.highlightGroup.children[0])
+        const child = this.highlightGroup.children[0]
+        if (child.geometry) child.geometry.dispose()
+        if (child.material) child.material.dispose()
+        this.highlightGroup.remove(child)
       }
-      // Draw a highlight circle around the marker location
-      const pos = this.latLngToVec3(marker.lat, marker.lng, 1.005)
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.06, 0.08, 32),
-        new THREE.MeshBasicMaterial({ color: 0x00ffaa, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+
+      if (!this.countriesGeoJSON) {
+        // Fallback: draw a ring if no geo data loaded yet
+        const pos = this.latLngToVec3(marker.lat, marker.lng, 1.005)
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.06, 0.08, 32),
+          new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+        )
+        ring.position.copy(pos)
+        ring.lookAt(pos.clone().multiplyScalar(2))
+        this.highlightGroup.add(ring)
+        return
+      }
+
+      // Find country by ID
+      const countryFeature = this.countriesGeoJSON.features.find(
+        f => String(f.id) === String(marker.countryId)
       )
-      ring.position.copy(pos)
-      ring.lookAt(pos.clone().multiplyScalar(2))
-      this.highlightGroup.add(ring)
+
+      if (!countryFeature) return
+
+      const geo = countryFeature.geometry
+      if (geo.type === 'Polygon') {
+        this.drawCountryBorder(geo.coordinates, false)
+      } else if (geo.type === 'MultiPolygon') {
+        this.drawCountryBorder(geo.coordinates, true)
+      }
+
+      // Add a pulsing highlight marker at the station location
+      const pos = this.latLngToVec3(marker.lat, marker.lng, 1.008)
+      const highlightDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.9 })
+      )
+      highlightDot.position.copy(pos)
+      this.highlightGroup.add(highlightDot)
+
+      const highlightRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.025, 0.04, 24),
+        new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+      )
+      highlightRing.position.copy(pos)
+      highlightRing.lookAt(pos.clone().multiplyScalar(2))
+      this.highlightGroup.add(highlightRing)
     },
     animate() {
       this._raf = requestAnimationFrame(this.animate)
       if (!this.isDragging) {
         this.earth.rotation.y += 0.002
+      }
+      // Pulse animation for highlight ring
+      if (this.highlightGroup && this.highlightGroup.children.length > 0) {
+        const t = Date.now() * 0.003
+        this.highlightGroup.children.forEach(child => {
+          if (child.material && child.material.opacity !== undefined) {
+            if (child.geometry && child.geometry.type === 'RingGeometry') {
+              child.material.opacity = 0.4 + 0.3 * Math.sin(t)
+            }
+          }
+        })
       }
       this.renderer.render(this.scene, this.camera)
     },

@@ -53,7 +53,7 @@ export default {
         color: COLORS,
         series: [{
           type: 'pie',
-          radius: ['50%', '75%'],
+          radius: ['45%', '72%'],
           center: ['50%', '50%'],
           data: DATA,
           label: { show: false },
@@ -71,14 +71,14 @@ export default {
 
 <style scoped>
 .agency-chart { display: flex; flex-direction: column; height: 100%; }
-.chart-el { width: 100%; height: 140px; }
+.chart-el { width: 100%; height: 150px; }
 .legend-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px;
-  font-size: 11px; padding: 0 4px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px;
+  font-size: 11px; padding: 4px 8px;
 }
 .legend-item { display: flex; align-items: center; gap: 4px; }
 .dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
-.lname { color: #8ec8f0; flex: 1; }
-.lval { color: #b0d0f0; min-width: 20px; text-align: right; }
-.lpct { color: #607090; min-width: 30px; text-align: right; }
+.lname { color: #8ec8f0; }
+.lval { color: #b0d0f0; margin-left: auto; min-width: 18px; text-align: right; }
+.lpct { color: #607090; min-width: 28px; text-align: right; }
 </style>
