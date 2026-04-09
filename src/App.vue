@@ -1,6 +1,6 @@
 <template>
   <div id="app">
-    <el-container>
+    <el-container v-if="!isFullscreen">
       <el-header>
         <div class="header-content">
           <h1 class="logo">Vue2 Template</h1>
@@ -13,6 +13,7 @@
             active-text-color="#ffd04b"
           >
             <el-menu-item index="/">首页</el-menu-item>
+            <el-menu-item index="/homepage">数据大屏</el-menu-item>
             <el-menu-item index="/charts">ECharts</el-menu-item>
             <el-menu-item index="/three">Three.js</el-menu-item>
             <el-menu-item index="/about">关于</el-menu-item>
@@ -23,12 +24,18 @@
         <router-view />
       </el-main>
     </el-container>
+    <router-view v-else />
   </div>
 </template>
 
 <script>
 export default {
-  name: 'App'
+  name: 'App',
+  computed: {
+    isFullscreen() {
+      return this.$route.path === '/homepage'
+    }
+  }
 }
 </script>
 
