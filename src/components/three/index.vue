@@ -20,7 +20,7 @@
 </template>
 <script>
 import * as THREE from "three";
-import * as TWEEN from "tween";
+import * as TWEEN from "@tweenjs/tween.js"; // v18
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import Stats from "three/examples/jsm/libs/stats.module.js";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
@@ -109,7 +109,7 @@ export default {
       lonlat: { x: 0, y: 0, z: 200 },
       camaPositions: [
         { x: 2, y: 5, z: 200 }, //远处
-        { x: 2, y: 5, z: 20 }//近处
+        { x: 2, y: 5, z: 30 }//近处
       ],
       groupRotation: [0, 2.9, 0],
       tooltip: {
@@ -128,7 +128,7 @@ export default {
     };
   },
   async mounted() {
-    await this.getWorldMap()
+    // await this.getWorldMap()
     this.mapDom = document.querySelector("#threeContainer");
     this.tooltipDom = document.querySelector(".tooltip");
     this.width = this.mapDom.clientWidth;
@@ -210,22 +210,22 @@ export default {
       this.sprite = null
       this.renderer.domElement = null
     },
-    getWorldMap() {
-      return this.$axiosGet(API.getWorldMap).then(res => {
-        this.posArr = res.map(val => {
-          let children = val.children.map(child => {
-            return {
-              ...child,
-              portDeptCountry: child.portArrvCountry
-            }
-          })
-          return {
-            ...val,
-            children
-          }
-        })
-      });
-    },
+    // getWorldMap() {
+    //   return this.$axiosGet(API.getWorldMap).then(res => {
+    //     this.posArr = res.map(val => {
+    //       let children = val.children.map(child => {
+    //         return {
+    //           ...child,
+    //           portDeptCountry: child.portArrvCountry
+    //         }
+    //       })
+    //       return {
+    //         ...val,
+    //         children
+    //       }
+    //     })
+    //   });
+    // },
     /**
      * @description 初始化相机
      */
@@ -516,7 +516,7 @@ export default {
       event.preventDefault();
       const point = this.getPonit(event);
       // TODO 后面会放开
-      return;
+      // return;
       // 点击国家点
       if (point && point.object.isDeptCountry && !this.isLargeMap) {
         const countryCode = point.object.info.countryDatasource
@@ -1354,7 +1354,7 @@ export default {
 .three-map {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: 100vh;
 }
 #threeContainer {
   width: 100%;

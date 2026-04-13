@@ -1,7 +1,6 @@
 const path = require('path')
 const { VueLoaderPlugin } = require('vue-loader')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
-const lessLoader = require('less-loader')
 
 module.exports = {
   entry: './src/main.js',
@@ -34,7 +33,7 @@ module.exports = {
       },
       {
         test: /\.less$/i,
-        use: ['style-loader', 'css-loader', lessLoader]
+        use: ['style-loader', 'css-loader', 'less-loader']
       },
       {
         test: /\.(png|jpe?g|gif|svg)(\?.*)?$/,
