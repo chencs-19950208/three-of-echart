@@ -28,7 +28,12 @@ const routes = [
     path: '/about',
     name: 'About',
     component: () => import('@/views/About.vue')
-  }
+  },
+  {
+    path: '/tree-home',
+    name: 'ThreeHome',
+    component: () => import('@/views/testHome.vue')
+  },
 ]
 
 const router = new VueRouter({
