@@ -1171,91 +1171,130 @@ export default {
     },
     // 地图描边
     // 处理坐标跨越 180 度的问题
+    // 检测坐标是否为真正的 MultiPolygon 嵌套（4层）
+    // Polygon: [ring, ...] 其中 ring = [[lon, lat], ...]（3层）
+    // MultiPolygon: [[ring, ...], ...]（4层）
+    isDeepMultiPolygon(coordinates) {
+      return coordinates.length > 0 &&
+        coordinates[0].length > 0 &&
+        coordinates[0][0].length > 0 &&
+        Array.isArray(coordinates[0][0][0])
+    },
+    // 将坐标统一展平为 rings 数组，每个 ring 是 [[lon, lat], ...]
+    flattenToRings(coordinates) {
+      if (this.isDeepMultiPolygon(coordinates)) {
+        // 真正的 MultiPolygon（4层嵌套）
+        const rings = []
+        coordinates.forEach(polygon => {
+          polygon.forEach(ring => rings.push(ring))
+        })
+        return rings
+      }
+      // Polygon 或伪 MultiPolygon（3层嵌套）
+      return coordinates
+    },
+    // 将坐标归一化为 polygons 数组，每个 polygon 是 [outerRing, ...holes]
+    normalizeToPolygons(coordinates) {
+      if (this.isDeepMultiPolygon(coordinates)) {
+        // 真正的 MultiPolygon（4层嵌套）
+        return coordinates
+      }
+      // Polygon（3层嵌套）- 包装为单个 polygon 的数组
+      return [coordinates]
+    },
     fixCoordinateJump(coordinates) {
       if (!coordinates || coordinates.length === 0) return coordinates
-      // 获取所有经度值
+      // 展平为 rings 后收集所有经度
+      const rings = this.flattenToRings(coordinates)
       let allLons = []
-      coordinates.forEach(polygon => {
-        polygon.forEach(point => allLons.push(point[0]))
+      rings.forEach(ring => {
+        ring.forEach(point => allLons.push(point[0]))
       })
       // 检查是否跨越 180 度
       const minLon = Math.min(...allLons)
       const maxLon = Math.max(...allLons)
       if (minLon < -90 && maxLon > 90) {
         // 跨越 180 度，将负经度转为正的
-        const newCoords = []
-        coordinates.forEach(polygon => {
-          const newPolygon = []
-          polygon.forEach(point => {
-            let lon = point[0]
-            if (lon < 0) lon = lon + 360
-            newPolygon.push([lon, point[1]])
-          })
-          newCoords.push(newPolygon)
-        })
-        return newCoords
+        // 需要保持原始嵌套结构
+        const fixPoint = point => {
+          let lon = point[0]
+          if (lon < 0) lon = lon + 360
+          return [lon, point[1]]
+        }
+        if (this.isDeepMultiPolygon(coordinates)) {
+          return coordinates.map(polygon =>
+            polygon.map(ring => ring.map(fixPoint))
+          )
+        }
+        return coordinates.map(ring => ring.map(fixPoint))
       }
       return coordinates
     },
     initMap(contryGeoJson) {
       // 遍历省份构建模型
+      console.log('initMap 接收到的 GeoJSON:', contryGeoJson);
       contryGeoJson.features.forEach(elem => {
+        console.log('处理 feature:', elem.properties?.name, 'geometry type:', elem.geometry.type);
+        console.log('原始 coordinates 层级:', elem.geometry.coordinates.length);
+        
         // 新建一个省份容器：用来存放省份对应的模型和轮廓线
         const province = new THREE.Object3D();
+        
         // 处理坐标跨越 180 度的问题
         const coordinates = this.fixCoordinateJump(elem.geometry.coordinates);
-        coordinates.forEach((polygon, index) => {
-          const positions = [];
-          const shapePositions = []
-          const vector2Arr = []
-          const shapeArr = []
-          const linGeometry = new THREE.BufferGeometry();
+        
+        console.log('fixCoordinateJump 后:', coordinates.length);
+        console.log('isDeepMultiPolygon:', this.isDeepMultiPolygon(coordinates));
+        
+        // 归一化为 polygons 数组，保留 polygon 层级结构
+        const polygons = this.normalizeToPolygons(coordinates);
+        
+        console.log('normalizeToPolygons 后 polygons 数量:', polygons.length);
+        
+        // 遍历每个 polygon
+        polygons.forEach(polygon => {
+          // polygon 中第一个环是外环，后续是内环（孔洞）
+          polygon.forEach((ring, ringIndex) => {
+            const positions = [];
+            const shapePositions = []
+            const linGeometry = new THREE.BufferGeometry();
 
-          const shape = new THREE.Shape()
-          for (let i = 0; i < polygon.length; i++) {
-            const pos = this.lglt2xyz(polygon[i][0], polygon[i][1]);
-            positions.push(pos.x * 1.01, pos.y * 1.01, pos.z * 1.01);
+            const shape = new THREE.Shape()
+            for (let i = 0; i < ring.length; i++) {
+              const pos = this.lglt2xyz(ring[i][0], ring[i][1]);
+              positions.push(pos.x * 1.01, pos.y * 1.01, pos.z * 1.01);
 
-            if (i === 0 ) {
-              shape.moveTo(polygon[i][0], -polygon[i][1])
-            } else {
-              shape.lineTo(polygon[i][0], -polygon[i][1])
+              if (i === 0 ) {
+                shape.moveTo(ring[i][0], -ring[i][1])
+              } else {
+                shape.lineTo(ring[i][0], -ring[i][1])
+              }
+              if (i === ring.length - 1) {
+                shape.lineTo(ring[0][0], -ring[0][1])
+              }
+              const shapePos = this.lon2xyz(radius, ring[i][0], ring[i][1])
+              shapePositions.push(shapePos.x * 1.01, shapePos.y * 1.01, shapePos.z * 1.01)
             }
-            if (i === polygon.length - 1) {
-              shape.lineTo(polygon[0][0], -polygon[0][1])
+
+            // 轮廓线
+            linGeometry.setAttribute(
+              "position",
+              new THREE.Float32BufferAttribute(positions, 3)
+            );
+            const line = new THREE.Line(linGeometry, this.mapLineMaterial);
+            province.add(line);
+
+            // 轮廓背景（只为每个 polygon 的外环绘制，ringIndex === 0）
+            if (ringIndex === 0) {
+              const geometry = new THREE.ShapeBufferGeometry(shape)
+              geometry.setAttribute(
+                "position",
+                new THREE.Float32BufferAttribute(shapePositions, 3)
+              );
+              const mesh = new THREE.Mesh(geometry, this.mapShapeMaterial)
+              province.add(mesh)
             }
-            const shapePos = this.lon2xyz(radius, polygon[i][0], polygon[i][1])
-            shapePositions.push(shapePos.x * 1.01, shapePos.y * 1.01, shapePos.z * 1.01)
-            vector2Arr.push(shapePos)
-          }
-
-          // console.log('shapePositions', positions, shapePositions)
-          // 轮廓线
-          linGeometry.setAttribute(
-            "position",
-            new THREE.Float32BufferAttribute(positions, 3)
-          );
-          // const matLine = new THREE.LineBasicMaterial({
-          //   color: 0x009FEB,
-          //   linewidth: 5,
-          // });
-          const line = new THREE.Line(linGeometry, this.mapLineMaterial);
-          province.add(line);
-
-          // 轮廓背景
-          const geometry = new THREE.ShapeBufferGeometry(shape)
-          geometry.setAttribute(
-            "position",
-            new THREE.Float32BufferAttribute(shapePositions, 3)
-          );
-          // const material = new THREE.MeshBasicMaterial({
-          //   color: 0x009FEB,
-          //   transparent: true,
-          //   opacity: 0.35,
-          //   side: THREE.DoubleSide
-          // })
-          const mesh = new THREE.Mesh(geometry, this.mapShapeMaterial)
-          province.add(mesh)
+          });
         });
         this.map.add(province);
       });

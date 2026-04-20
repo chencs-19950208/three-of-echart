@@ -32,7 +32,7 @@ const routes = [
   {
     path: '/tree-home',
     name: 'ThreeHome',
-    component: () => import('@/views/testHome.vue')
+    component: () => import('@/views/collision-data-complete.vue')
   },
 ]
 
